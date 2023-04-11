@@ -4,7 +4,7 @@ How to make almost anything - spring 2023
 ## Todo
 
 - [ ] 1. Make stepper motor point at some angle, controlled from software
-  - [ ] Picture of circuit (diagram and physical)
+  - [x] Picture of circuit (diagram and physical)
   - [ ] Arduino code
   - [ ] Print paper with 360 degrees
   - [ ] Demo video and pictures
