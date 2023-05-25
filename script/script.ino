@@ -1,5 +1,5 @@
 /*
- Stepper Motor Control -  revolution
+ Stepper Motor Control - revolution
  */
 
 enum Mode {
@@ -49,7 +49,7 @@ void loop() {
       Serial.print(program_array_snd[program_index]);
       Serial.write("]...\n");
       revolve(program_array_fst[program_index]);
-      delay(1); // Actually move the arm here :)
+      delay(1);
       program_index++;
     }
     default: break;
