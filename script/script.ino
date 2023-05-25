@@ -8,6 +8,11 @@ enum Mode {
   Run = 'r'
 };
 
+enum Arm {
+  Fst,
+  Snd
+};
+
 char mode = Homing;
 
 #define INPUT_BUFFER_SIZE 20
@@ -23,16 +28,17 @@ short program_array_snd[PROGRAM_BUFFER_SIZE] = {0};
 short program_size_snd = 1;
 short program_index = -1;
 
-#define STEP_PIN 11
-#define DIR_PIN 10
-#define STEPS_PER_REV 200
-#define STEPS_PER_DEG_FST (200 / 360.0)
-#define STEPS_PER_DEG_SND (0 / 360.0)
+#define STEP_PIN(arm) ((arm == Fst) ? 11 : ((arm == Snd) ? 9 : -1))
+#define DIR_PIN(arm) ((arm == Fst) ? 10 : ((arm == Snd) ? 8 : -1))
+#define STEPS_PER_DEG(arm) ((arm == Fst) ? (200 / 360.0) : ((arm == Snd) ? (200 / 360.0) : 0))
+#define MOTOR_DELAY_MS 15
 
 
 void setup() {
-  pinMode(STEP_PIN, OUTPUT);
-  pinMode(DIR_PIN, OUTPUT);
+  pinMode(STEP_PIN(Fst), OUTPUT);
+  pinMode(STEP_PIN(Snd), OUTPUT);
+  pinMode(DIR_PIN(Fst), OUTPUT);
+  pinMode(DIR_PIN(Snd), OUTPUT);
 
   Serial.begin(9600); // initialize the serial port:
   verify_program();
@@ -48,7 +54,8 @@ void loop() {
       Serial.write(",");
       Serial.print(program_array_snd[program_index]);
       Serial.write("]...\n");
-      revolve(program_array_fst[program_index]);
+      // revolve(Fst, program_array_fst[program_index]);
+      execute_program_frame();
       delay(1);
       program_index++;
     }
@@ -78,7 +85,7 @@ void execute_command(String command) {
       program_index = 0;
     case Homing:
     case Program:
-      Serial.write(("Switching mode\n"));
+      Serial.write("Switching mode\n");
       mode = command.charAt(1);
       break;
     default:
@@ -95,9 +102,11 @@ void handle_homing_command(String command) {
   int arm_link = command.substring(0,command.indexOf(' ')).toInt(); 
   int deg_move = command.substring(command.indexOf(' ')+1).toInt();
   
-  if (arm_link > 2 || arm_link < 0) { Serial.write("Sorry, I only have 2 arms :(\n"); return;}      
-
-  revolve(deg_move); // Should actually move the specified arm
+  switch(arm_link) {
+    case 1: revolve(Fst, deg_move); break;
+    case 2: revolve(Snd, deg_move); break;
+    default: Serial.write("Sorry, I only have 2 arms :(\n");
+  }
 }
 
 void handle_program_command(String command) {
@@ -151,32 +160,57 @@ void load_program_array(String data, short* array, short* array_size) {
   *array_size = i;  
 }
 
-void revolve(int deg) {
+void execute_program_frame() {
+  int fst_move_steps;
+  int snd_move_steps;
+  {
+    int fst_move_deg = program_array_fst[program_index];
+    int snd_move_deg = program_array_snd[program_index];
+    if (fst_move_deg > 0) { digitalWrite(DIR_PIN(Fst), LOW); } else { digitalWrite(DIR_PIN(Fst), HIGH); fst_move_deg = abs(fst_move_deg); }
+    if (snd_move_deg > 0) { digitalWrite(DIR_PIN(Snd), LOW); } else { digitalWrite(DIR_PIN(Snd), HIGH); snd_move_deg = abs(snd_move_deg); }
+    fst_move_steps = fst_move_deg * STEPS_PER_DEG(Fst);
+    snd_move_steps = snd_move_deg * STEPS_PER_DEG(Snd);
+  }
+
+  digitalWrite(STEP_PIN(Fst), LOW);
+  digitalWrite(STEP_PIN(Snd), LOW);
+  while(fst_move_steps || snd_move_steps) {
+    if(fst_move_steps) { digitalWrite(STEP_PIN(Fst), HIGH); fst_move_steps--; }
+    if(snd_move_steps) { digitalWrite(STEP_PIN(Snd), HIGH); snd_move_steps--; }
+
+    delayMicroseconds(10);
+    digitalWrite(STEP_PIN(Fst), LOW);
+    digitalWrite(STEP_PIN(Snd), LOW);
+    delay(MOTOR_DELAY_MS);
+  }
+}
+
+void revolve(Arm arm, int deg) {
   if (0 < deg) {
-    digitalWrite(DIR_PIN, LOW);
+    digitalWrite(DIR_PIN(arm), LOW);
   } else if (deg < 0) {
-    digitalWrite(DIR_PIN, HIGH);
+    digitalWrite(DIR_PIN(arm), HIGH);
     deg = abs(deg);
   } else {
     return;
   }
 
-  int steps = deg * STEPS_PER_DEG_FST;
+  int steps = deg * STEPS_PER_DEG(arm);
 
   Serial.print("Rotating ");
+  Serial.print(arm + 1);
+  Serial.print(" ");
   Serial.print(deg);
   Serial.print(" degrees (");
   Serial.print(steps);
   Serial.println(" steps) ...");
 
-  digitalWrite(STEP_PIN, LOW);
-
-  int delayms = 15;
+  digitalWrite(STEP_PIN(arm), LOW);
 
   for (int i = 0; i < steps; i++) {
-    digitalWrite(STEP_PIN, HIGH);
+    digitalWrite(STEP_PIN(arm), HIGH);
     delayMicroseconds(10);
-    digitalWrite(STEP_PIN, LOW);
-    delay(delayms);
+    digitalWrite(STEP_PIN(arm), LOW);
+    delay(MOTOR_DELAY_MS);
   }
 }
