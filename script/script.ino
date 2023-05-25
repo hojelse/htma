@@ -14,21 +14,20 @@ char mode = Homing;
 char input_buffer[INPUT_BUFFER_SIZE + 1];
 char input_index = 0;
 
-#define MIN_X -100
-#define MAX_X 100
-#define MIN_Y -100
-#define MAX_Y 100
+#define MIN_DEG -180
+#define MAX_DEG 180
 #define PROGRAM_BUFFER_SIZE 10
-short program_array_x[PROGRAM_BUFFER_SIZE] = {0};
-short program_size_x = 1;
-short program_array_y[PROGRAM_BUFFER_SIZE] = {0};
-short program_size_y = 1;
-short program_index = 0;
-char program_verified = 0;
+short program_array_fst[PROGRAM_BUFFER_SIZE] = {0};
+short program_size_fst = 1;
+short program_array_snd[PROGRAM_BUFFER_SIZE] = {0};
+short program_size_snd = 1;
+short program_index = -1;
 
 #define STEP_PIN 11
 #define DIR_PIN 10
 #define STEPS_PER_REV 200
+#define STEPS_PER_DEG_FST (200 / 360.0)
+#define STEPS_PER_DEG_SND (0 / 360.0)
 
 
 void setup() {
@@ -43,34 +42,43 @@ void loop() {
   if (Serial.available()) execute_command(Serial.readString());
   switch(mode) {
     case Run: {
-      Serial.write("Moveing to [");
-      Serial.write(program_array_x[program_index]);
+      if (program_index >= program_size_fst) break;
+      Serial.write("Executing frame [");
+      Serial.print(program_array_fst[program_index]);
       Serial.write(",");
-      Serial.write(program_array_y[program_index]);
+      Serial.print(program_array_snd[program_index]);
       Serial.write("]...\n");
+      revolve(program_array_fst[program_index]);
+      delay(1); // Actually move the arm here :)
       program_index++;
-      delay(1000); // Actually move the arm here :)
-      program_index = (program_index + 1) % PROGRAM_BUFFER_SIZE;
     }
     default: break;
   }
 }
 
 void verify_program() {
-  program_verified = 0;
-  if (program_size_x != program_size_y) {Serial.write("The current program arrays have differing lengths...\n"); return;}
-  for(short i = 0; i < program_size_x; i++) {
-    if (program_array_x[i] < MIN_X || program_array_x[i] > MAX_X || program_array_y[i] < MIN_Y || program_array_y[i] > MAX_Y) {Serial.write("The current program breaks point limits...\n"); return;}       
+  program_index = -1;
+  if (program_size_fst != program_size_snd) {Serial.write("The current program arrays have differing lengths...\n"); return;}
+  for(short i = 0; i < program_size_fst; i++) {
+    if (
+      program_array_fst[i] < MIN_DEG || 
+      program_array_fst[i] > MAX_DEG || 
+      program_array_snd[i] < MIN_DEG || 
+      program_array_snd[i] > MAX_DEG
+    ) {Serial.write("The current program breaks limits...\n"); return;}       
   }
-  program_verified = 1;
+  Serial.write("Program verified!\n");
+  program_index = 0;
 }
 
 void execute_command(String command) {
   if (command.charAt(0) == ':') switch(command.charAt(1)) {
     case Run:
-      if (!program_verified) { Serial.write("The loaded program is not verified, so I cannot run it :(\n"); break;}
+      if (program_index < 0) { Serial.write("The loaded program is not verified, so I cannot run it :(\n"); break;}
+      program_index = 0;
     case Homing:
     case Program:
+      Serial.write(("Switching mode\n"));
       mode = command.charAt(1);
       break;
     default:
@@ -95,25 +103,49 @@ void handle_homing_command(String command) {
 void handle_program_command(String command) {
   switch(command.charAt(0)) {
     case 'v': { verify_program(); break; }
-    case 'x': {
-      load_program_array(command.substring(command.indexOf(' ')), program_array_x, &program_size_x);
-      program_verified = 0;
+    case 'f': {
+      Serial.write("Loading new fst array...\n");
+      load_program_array(command.substring(command.indexOf(' ')+1), program_array_fst, &program_size_fst);
+      program_index = -1;
       break;
     }
-    case 'y':  {
-      load_program_array(command.substring(command.indexOf(' ')), program_array_y, &program_size_y);
-      program_verified = 0;
+    case 's':  {
+      Serial.write("Loading new snd array...\n");
+      load_program_array(command.substring(command.indexOf(' ')+1), program_array_snd, &program_size_snd);
+      program_index = -1;
       break;
     }
   }
 }
 
+String trim_start(String data) {
+  int index = 0;
+  while(index < data.length()-1) if (data.charAt(index) == ' ') {index++;} else {break;}
+  return data.substring(index);
+}
+
+String trim_end(String data) {
+  int index = data.length()-1;
+  while(index > 0) if (data.charAt(index) == ' ') {index--;} else {break;}
+  return data.substring(0, index);
+}
+
 void load_program_array(String data, short* array, short* array_size) {
+
+  data = trim_start(trim_end(data));
+
   int i = 0;
   while(i < PROGRAM_BUFFER_SIZE) {
-    data.trim();
-    if (data = "") break;
-    array[i] = data.substring(0, data.indexOf(' ')).toInt();
+    if (data == "") break;
+
+    if (data.indexOf(' ') == -1) {
+      array[i] = (short)data.toInt();
+      data = "";
+    }
+    else {
+      array[i] = (short)data.substring(0, data.indexOf(' ')).toInt();
+      data = trim_start(data.substring(data.indexOf(' ')));
+    }
     i++;
   }
   *array_size = i;  
@@ -129,9 +161,7 @@ void revolve(int deg) {
     return;
   }
 
-  double step_per_deg = STEPS_PER_REV / 360.0;
-
-  int steps = deg * step_per_deg;
+  int steps = deg * STEPS_PER_DEG_FST;
 
   Serial.print("Rotating ");
   Serial.print(deg);
