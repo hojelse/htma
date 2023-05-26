@@ -30,7 +30,7 @@ short program_index = -1;
 
 #define STEP_PIN(arm) ((arm == Fst) ? 11 : ((arm == Snd) ? 9 : -1))
 #define DIR_PIN(arm) ((arm == Fst) ? 10 : ((arm == Snd) ? 8 : -1))
-#define STEPS_PER_DEG(arm) ((arm == Fst) ? (200 / 360.0) : ((arm == Snd) ? (200 / 360.0) : 0))
+#define STEPS_PER_DEG(arm) ((arm == Fst) ? (400 / 360.0) : ((arm == Snd) ? (400 / 360.0) : 0))
 #define MOTOR_DELAY_MS 15
 
 
@@ -169,7 +169,7 @@ void execute_program_frame() {
     int snd_move_steps;
     {
       int fst_move_deg = program_array_fst[program_index];
-      int snd_move_deg = program_array_snd[program_index];
+      int snd_move_deg = fst_move_deg + program_array_snd[program_index];
       if (fst_move_deg > 0) { digitalWrite(DIR_PIN(Fst), LOW); } else { digitalWrite(DIR_PIN(Fst), HIGH); fst_move_deg = abs(fst_move_deg); }
       if (snd_move_deg > 0) { digitalWrite(DIR_PIN(Snd), LOW); } else { digitalWrite(DIR_PIN(Snd), HIGH); snd_move_deg = abs(snd_move_deg); }
       fst_move_steps = fst_move_deg * STEPS_PER_DEG(Fst);
