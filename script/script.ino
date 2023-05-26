@@ -19,8 +19,10 @@ char mode = Homing;
 char input_buffer[INPUT_BUFFER_SIZE + 1];
 char input_index = 0;
 
-#define MIN_DEG -180
-#define MAX_DEG 180
+#define FREE_DEG_FST 90
+#define FREE_DEG_SND 120
+short fst_curr_angle = 0;
+short snd_curr_angle = 0;
 #define PROGRAM_BUFFER_SIZE 10
 short program_array_fst[PROGRAM_BUFFER_SIZE] = {0};
 short program_size_fst = 1;
@@ -28,9 +30,10 @@ short program_array_snd[PROGRAM_BUFFER_SIZE] = {0};
 short program_size_snd = 1;
 short program_index = -1;
 
+#define MOVE_DIR(dir, arm) (dir) ? (((arm == Fst) ? HIGH : ((arm == Snd) ? LOW : HIGH))) : ((arm == Fst) ? LOW : ((arm == Snd) ? HIGH : LOW))
 #define STEP_PIN(arm) ((arm == Fst) ? 11 : ((arm == Snd) ? 9 : -1))
 #define DIR_PIN(arm) ((arm == Fst) ? 10 : ((arm == Snd) ? 8 : -1))
-#define STEPS_PER_DEG(arm) ((arm == Fst) ? (400 / 360.0) : ((arm == Snd) ? (400 / 360.0) : 0))
+#define STEPS_PER_DEG(arm) ((arm == Fst) ? (200 / 360.0) : ((arm == Snd) ? (200 / 360.0) : 0))
 #define MOTOR_DELAY_MS 15
 
 
@@ -67,10 +70,10 @@ void verify_program() {
   if (program_size_fst != program_size_snd) {Serial.write("Error: Different lengths\n"); return;}
   for(short i = 0; i < program_size_fst; i++) {
     if (
-      program_array_fst[i] < MIN_DEG || 
-      program_array_fst[i] > MAX_DEG || 
-      program_array_snd[i] < MIN_DEG || 
-      program_array_snd[i] > MAX_DEG
+      program_array_fst[i] < -FREE_DEG_FST || 
+      program_array_fst[i] > FREE_DEG_FST || 
+      program_array_snd[i] < -FREE_DEG_SND || 
+      program_array_snd[i] > FREE_DEG_SND
     ) {Serial.write("Error: Broken limits\n"); return;}       
   }
   Serial.write("Program verified!\n");
@@ -98,6 +101,12 @@ void execute_command(String command) {
 }
 
 void handle_homing_command(String command) {
+  if (command.charAt(0) == 'z') {
+    Serial.write("Zeroed\n");
+    fst_curr_angle = 0;
+    snd_curr_angle = 0;
+    return;
+  }
   int arm_link = command.substring(0,command.indexOf(' ')).toInt(); 
   int deg_move = command.substring(command.indexOf(' ')+1).toInt();
   
@@ -160,98 +169,102 @@ void load_program_array(String data, short* array, short* array_size) {
 }
 
 void execute_program_frame() {
-  Arm longest_mover;
-  Arm shortest_mover;
-  int longest_mover_steps;
-  int shortest_mover_steps;
+  int fst_step_delay;
+  int snd_step_delay;
+  int fst_move_steps;
+  int snd_move_steps;
   {
-    int fst_move_steps;
-    int snd_move_steps;
-    {
-      int fst_move_deg = program_array_fst[program_index];
-      int snd_move_deg = fst_move_deg + program_array_snd[program_index];
-      if (fst_move_deg > 0) { digitalWrite(DIR_PIN(Fst), LOW); } else { digitalWrite(DIR_PIN(Fst), HIGH); fst_move_deg = abs(fst_move_deg); }
-      if (snd_move_deg > 0) { digitalWrite(DIR_PIN(Snd), LOW); } else { digitalWrite(DIR_PIN(Snd), HIGH); snd_move_deg = abs(snd_move_deg); }
-      fst_move_steps = fst_move_deg * STEPS_PER_DEG(Fst);
-      snd_move_steps = snd_move_deg * STEPS_PER_DEG(Snd);
-    }
-
-    // Handles simple cases
-    if (!fst_move_steps) { 
-      digitalWrite(STEP_PIN(Snd), LOW);
-      while(snd_move_steps--) {
-        digitalWrite(STEP_PIN(Snd), HIGH);
-        delayMicroseconds(10);
-        digitalWrite(STEP_PIN(Snd), LOW);
-        delay(MOTOR_DELAY_MS);
-      } 
-      return; 
-    }
-    if (!snd_move_steps) { 
-      digitalWrite(STEP_PIN(Fst), LOW);
-      while(fst_move_steps--) {
-        digitalWrite(STEP_PIN(Fst), HIGH);
-        delayMicroseconds(10);
-        digitalWrite(STEP_PIN(Fst), LOW);
-        delay(MOTOR_DELAY_MS);
-      } 
-      return; 
-    }
-    if (fst_move_steps == snd_move_steps) {
-      digitalWrite(STEP_PIN(Fst), LOW);
-      digitalWrite(STEP_PIN(Snd), LOW);
-      while(fst_move_steps--) {
-        digitalWrite(STEP_PIN(Fst), HIGH);
-        digitalWrite(STEP_PIN(Snd), HIGH);
-        delayMicroseconds(10);
-        digitalWrite(STEP_PIN(Fst), LOW);
-        digitalWrite(STEP_PIN(Snd), LOW);
-        delay(MOTOR_DELAY_MS);
-      }
-      return;
-    }
-
-    if (fst_move_steps > snd_move_steps) {
-      longest_mover = Fst; longest_mover_steps = fst_move_steps;
-      shortest_mover = Snd; shortest_mover_steps = snd_move_steps;
-    }
-    else {
-      longest_mover = Snd; longest_mover_steps = snd_move_steps;
-      shortest_mover = Fst; shortest_mover_steps = fst_move_steps;
-    }
+    int fst_move_deg = program_array_fst[program_index] - fst_curr_angle;
+    int snd_move_deg = fst_move_deg + (program_array_snd[program_index] - snd_curr_angle);
+    if (fst_move_deg > 0) { digitalWrite(DIR_PIN(Fst), MOVE_DIR(true, Fst)); } else { digitalWrite(DIR_PIN(Fst), MOVE_DIR(false, Fst)); fst_move_deg = abs(fst_move_deg); }
+    if (snd_move_deg > 0) { digitalWrite(DIR_PIN(Snd), MOVE_DIR(true, Snd)); } else { digitalWrite(DIR_PIN(Snd), MOVE_DIR(false, Snd)); snd_move_deg = abs(snd_move_deg); }
+    fst_move_steps = fst_move_deg * STEPS_PER_DEG(Fst);
+    snd_move_steps = snd_move_deg * STEPS_PER_DEG(Snd);
+    fst_curr_angle = program_array_fst[program_index];
+    snd_curr_angle = program_array_snd[program_index];
   }
 
-  double coefficient = (shortest_mover_steps / (double)(longest_mover_steps - shortest_mover_steps));
-  double counter = 0;
-  int shortest_step_count = 0;
+  // Handles simple cases
+  if (!fst_move_steps) { 
+    digitalWrite(STEP_PIN(Snd), LOW);
+    while(snd_move_steps--) {
+      digitalWrite(STEP_PIN(Snd), HIGH);
+      delayMicroseconds(10);
+      digitalWrite(STEP_PIN(Snd), LOW);
+      delay(MOTOR_DELAY_MS);
+    } 
+    return; 
+  }
+  if (!snd_move_steps) { 
+    digitalWrite(STEP_PIN(Fst), LOW);
+    while(fst_move_steps--) {
+      digitalWrite(STEP_PIN(Fst), HIGH);
+      delayMicroseconds(10);
+      digitalWrite(STEP_PIN(Fst), LOW);
+      delay(MOTOR_DELAY_MS);
+    } 
+    return; 
+  }
+  if (fst_move_steps == snd_move_steps) {
+    digitalWrite(STEP_PIN(Fst), LOW);
+    digitalWrite(STEP_PIN(Snd), LOW);
+    while(fst_move_steps--) {
+      digitalWrite(STEP_PIN(Fst), HIGH);
+      digitalWrite(STEP_PIN(Snd), HIGH);
+      delayMicroseconds(10);
+      digitalWrite(STEP_PIN(Fst), LOW);
+      digitalWrite(STEP_PIN(Snd), LOW);
+      delay(MOTOR_DELAY_MS);
+    }
+    return;
+  }
+
+  if (fst_move_steps > snd_move_steps) {
+    fst_step_delay = MOTOR_DELAY_MS;
+    snd_step_delay = (int)(MOTOR_DELAY_MS * (fst_move_steps/(double)snd_move_steps));
+  }
+  else {
+    snd_step_delay = MOTOR_DELAY_MS;
+    fst_step_delay = (int)(MOTOR_DELAY_MS * (snd_move_steps/(double)fst_move_steps));
+  }
+
+  // Serial.println(fst_move_steps);
+  // Serial.println(snd_move_steps);
+  // Serial.println(fst_step_delay);
+  // Serial.println(snd_step_delay);
+
   digitalWrite(STEP_PIN(Fst), LOW);
   digitalWrite(STEP_PIN(Snd), LOW);
-  while(longest_mover_steps--) {
-    digitalWrite(STEP_PIN(longest_mover), HIGH);
-    if (counter >= 1.0) {
-      digitalWrite(STEP_PIN(shortest_mover), HIGH);
-      shortest_step_count++;
-      counter -= 1;
+  int millis_since_fst = 0;
+  int millis_since_snd = 0;
+  int prev_millis = millis();
+  while(fst_move_steps || snd_move_steps) {
+    if (fst_move_steps && millis_since_fst >= fst_step_delay) {
+      fst_move_steps--;
+      digitalWrite(STEP_PIN(Fst), HIGH);
+      millis_since_fst = 0;
     }
-    else counter += coefficient;
+    if (snd_move_steps && millis_since_snd >= snd_step_delay) {
+      snd_move_steps--;
+      digitalWrite(STEP_PIN(Snd), HIGH);
+      millis_since_snd = 0;
+    }
     delayMicroseconds(10);
-    digitalWrite(STEP_PIN(longest_mover), LOW);
-    digitalWrite(STEP_PIN(shortest_mover), LOW);
-    delay(MOTOR_DELAY_MS);
+    digitalWrite(STEP_PIN(Fst), LOW);
+    digitalWrite(STEP_PIN(Snd), LOW);
+    int temp = millis();
+    millis_since_fst += temp - prev_millis;
+    millis_since_snd += temp - prev_millis;
+    prev_millis = temp;
   }
-  while((shortest_step_count++) < shortest_mover_steps) {
-    digitalWrite(STEP_PIN(shortest_mover), HIGH);
-    delayMicroseconds(10);
-    digitalWrite(STEP_PIN(shortest_mover), LOW);
-    delay(MOTOR_DELAY_MS);
-  }
+
 }
 
 void revolve(Arm arm, int deg) {
   if (0 < deg) {
-    digitalWrite(DIR_PIN(arm), LOW);
+    digitalWrite(DIR_PIN(arm), MOVE_DIR(true, arm));
   } else if (deg < 0) {
-    digitalWrite(DIR_PIN(arm), HIGH);
+    digitalWrite(DIR_PIN(arm), MOVE_DIR(false, arm));
     deg = abs(deg);
   } else {
     return;
