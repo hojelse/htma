@@ -35,7 +35,7 @@ short program_index = -1;
 #define STEPS_SND_MOTOR 3200.0
 #define RATIO_FST_MOTOR 2.857
 #define RATIO_SND_MOTOR 1.0
-#define MOVE_DIR(dir, arm) (dir) ? (((arm == Fst) ? HIGH : ((arm == Snd) ? LOW : HIGH))) : ((arm == Fst) ? LOW : ((arm == Snd) ? HIGH : LOW))
+#define MOVE_DIR(dir, arm) (dir) ? (((arm == Fst) ? LOW : ((arm == Snd) ? LOW : HIGH))) : ((arm == Fst) ? HIGH : ((arm == Snd) ? HIGH : LOW))
 #define STEP_PIN(arm) ((arm == Fst) ? 11 : ((arm == Snd) ? 9 : -1))
 #define DIR_PIN(arm) ((arm == Fst) ? 10 : ((arm == Snd) ? 8 : -1))
 #define STEPS_PER_DEG(arm) ((arm == Fst) ? ((STEPS_FST_MOTOR * RATIO_FST_MOTOR) / 360.0) : ((arm == Snd) ? ((STEPS_SND_MOTOR * RATIO_SND_MOTOR) / 360.0) : 0))
