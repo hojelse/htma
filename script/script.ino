@@ -29,7 +29,7 @@ short sequence_size_fst = 1;
 short sequence_snd[PROGRAM_BUFFER_SIZE] = {0};
 short sequence_size_snd = 1;
 short program_index = -1;
-
+bool paused = false;
 
 #define STEPS_FST_MOTOR 3200.0
 #define STEPS_SND_MOTOR 3200.0
@@ -67,7 +67,7 @@ void loop() {
   if (Serial.available()) execute_command(Serial.readString());
   switch(mode) {
     case Run: {
-      if (program_index >= sequence_size_fst) break;
+      if (paused || program_index >= sequence_size_fst) break;
       Serial.write("Executing frame [");
       Serial.print(sequence_fst[program_index]);
       Serial.write(",");
@@ -100,7 +100,9 @@ void execute_command(String command) {
   if (command.charAt(0) == ':') switch(command.charAt(1)) {
     case Run:
       if (program_index < 0) { Serial.write("Error: Non-verified program\n"); break;}
+      paused = false;
       program_index = 0;
+      Serial.write("Running\n");
     case Homing:
     case Program:
       Serial.write("Mode switched\n");
@@ -112,6 +114,7 @@ void execute_command(String command) {
   else switch(mode) {
     case Homing: handle_homing_command(command); break;
     case Program: handle_program_command(command); break;
+    case Run: handle_run_command(command); break;
     default: break; 
   }
 }
@@ -164,6 +167,23 @@ void handle_program_command(String command) {
       program_index = -1;
       break;
     }
+    default: Serial.println("Error: Unknown command");
+  }
+}
+
+void handle_run_command(String command) {
+  switch(command.charAt(0)) {
+    case 'p': {
+      paused = true;
+      Serial.write("Pausing\n");
+      return;
+    }
+    case 'r': {
+      paused = false;
+      Serial.write("Resuming\n");
+      return;
+    }
+    default: Serial.println("Error: Unknown command");
   }
 }
 

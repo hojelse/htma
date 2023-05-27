@@ -34,3 +34,8 @@ As an example the sequence of *f*[0,20,20], will move the first link to its zero
 
 ## Run, :r
 This mode executes the sequence of moves described by the programmed sequence. This mode is inaccesible while the programmed sequence is unverified.
+
+| command | explaination |
+| --- | --- |
+| p | Pause the run |
+| r | Resume the run |
