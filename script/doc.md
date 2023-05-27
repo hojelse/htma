@@ -21,6 +21,10 @@ This mode enables manual control of the arm, as well as zeroing. Note that the z
 ## Program, :p
 This mode enables programming a sequence of positions for the arm to follow. When ever the program changes, it will have to be verified, before the arm will run it.
 
+A program consists of a sequence of angles, relative to zero, for each link in the arm. The collection of the *i*'th angle for each sequence is a keyframe, which describes a configuration the arm will take at some point.
+
+As an example the sequence of *f*[0,20,20], will move the first link to its zero, then to angle 20, and the remain there for 1 frame. Both negative and positive angles are supported.
+
 | command | explaination |
 | --- | --- |
 | f *int** | Set a new sequence for the first link to follow |

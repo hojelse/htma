@@ -24,10 +24,10 @@ char input_index = 0;
 short fst_curr_angle = 0;
 short snd_curr_angle = 0;
 #define PROGRAM_BUFFER_SIZE 10
-short program_array_fst[PROGRAM_BUFFER_SIZE] = {0};
-short program_size_fst = 1;
-short program_array_snd[PROGRAM_BUFFER_SIZE] = {0};
-short program_size_snd = 1;
+short sequence_fst[PROGRAM_BUFFER_SIZE] = {0};
+short sequence_size_fst = 1;
+short sequence_snd[PROGRAM_BUFFER_SIZE] = {0};
+short sequence_size_snd = 1;
 short program_index = -1;
 
 #define MOVE_DIR(dir, arm) (dir) ? (((arm == Fst) ? HIGH : ((arm == Snd) ? LOW : HIGH))) : ((arm == Fst) ? LOW : ((arm == Snd) ? HIGH : LOW))
@@ -51,13 +51,13 @@ void loop() {
   if (Serial.available()) execute_command(Serial.readString());
   switch(mode) {
     case Run: {
-      if (program_index >= program_size_fst) break;
+      if (program_index >= sequence_size_fst) break;
       Serial.write("Executing frame [");
-      Serial.print(program_array_fst[program_index]);
+      Serial.print(sequence_fst[program_index]);
       Serial.write(",");
-      Serial.print(program_array_snd[program_index]);
+      Serial.print(sequence_snd[program_index]);
       Serial.write("]\n");
-      execute_program_frame(program_array_fst[program_index], program_array_snd[program_index]);
+      execute_movement(sequence_fst[program_index], sequence_snd[program_index]);
       delay(1);
       program_index++;
     }
@@ -67,13 +67,13 @@ void loop() {
 
 void verify_program() {
   program_index = -1;
-  if (program_size_fst != program_size_snd) {Serial.write("Error: Different lengths\n"); return;}
-  for(short i = 0; i < program_size_fst; i++) {
+  if (sequence_size_fst != sequence_size_snd) {Serial.write("Error: Different lengths\n"); return;}
+  for(short i = 0; i < sequence_size_fst; i++) {
     if (
-      program_array_fst[i] < -FREE_DEG_FST || 
-      program_array_fst[i] > FREE_DEG_FST || 
-      program_array_snd[i] < -FREE_DEG_SND || 
-      program_array_snd[i] > FREE_DEG_SND
+      sequence_fst[i] < -FREE_DEG_FST || 
+      sequence_fst[i] > FREE_DEG_FST || 
+      sequence_snd[i] < -FREE_DEG_SND || 
+      sequence_snd[i] > FREE_DEG_SND
     ) {Serial.write("Error: Broken limits\n"); return;}       
   }
   Serial.write("Program verified!\n");
@@ -118,8 +118,8 @@ void handle_homing_command(String command) {
   int deg_move = command.substring(command.indexOf(' ')+1).toInt();
   
   switch(arm_link) {
-    case 'f': execute_program_frame(fst_curr_angle+deg_move, snd_curr_angle); break;
-    case 's': execute_program_frame(fst_curr_angle, snd_curr_angle+deg_move); break;
+    case 'f': execute_movement(fst_curr_angle+deg_move, snd_curr_angle); break;
+    case 's': execute_movement(fst_curr_angle, snd_curr_angle+deg_move); break;
     default: Serial.write("Error: No such arm\n");
   }
 }
@@ -128,13 +128,13 @@ void handle_program_command(String command) {
   switch(command.charAt(0)) {
     case 'v': { verify_program(); break; }
     case 'f': {
-      load_program_array(command.substring(command.indexOf(' ')+1), program_array_fst, &program_size_fst);
+      load_program_array(command.substring(command.indexOf(' ')+1), sequence_fst, &sequence_size_fst);
       Serial.write("Loaded array!\n");
       program_index = -1;
       break;
     }
     case 's':  {
-      load_program_array(command.substring(command.indexOf(' ')+1), program_array_snd, &program_size_snd);
+      load_program_array(command.substring(command.indexOf(' ')+1), sequence_snd, &sequence_size_snd);
       Serial.write("Loaded array!\n");
       program_index = -1;
       break;
@@ -175,7 +175,7 @@ void load_program_array(String data, short* array, short* array_size) {
   *array_size = i;  
 }
 
-void execute_program_frame(short fst_move_to, short snd_move_to) {
+void execute_movement(short fst_move_to, short snd_move_to) {
   int fst_step_delay;
   int snd_step_delay;
   int fst_move_steps;
