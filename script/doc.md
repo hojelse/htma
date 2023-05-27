@@ -17,6 +17,7 @@ This mode enables manual control of the arm, as well as zeroing. Note that the z
 | s *int* | Move the second link *x* degrees |
 | w | Print the current recorded angles of the arm, to serial |
 | z | Set the current recorded angles of the arm to 0 |
+| m *int* | Set motor delay, values between 6 and 100 are accepted (inclusive) | 
 
 ## Program, :p
 This mode enables programming a sequence of positions for the arm to follow. When ever the program changes, it will have to be verified, before the arm will run it.

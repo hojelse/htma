@@ -33,14 +33,25 @@ short program_index = -1;
 
 #define STEPS_FST_MOTOR 3200.0
 #define STEPS_SND_MOTOR 3200.0
-#define RATIO_FST_MOTOR 2.857
+#define RATIO_FST_MOTOR 2.857143
 #define RATIO_SND_MOTOR 1.0
 #define MOVE_DIR(dir, arm) (dir) ? (((arm == Fst) ? LOW : ((arm == Snd) ? LOW : HIGH))) : ((arm == Fst) ? HIGH : ((arm == Snd) ? HIGH : LOW))
 #define STEP_PIN(arm) ((arm == Fst) ? 11 : ((arm == Snd) ? 9 : -1))
 #define DIR_PIN(arm) ((arm == Fst) ? 10 : ((arm == Snd) ? 8 : -1))
 #define STEPS_PER_DEG(arm) ((arm == Fst) ? ((STEPS_FST_MOTOR * RATIO_FST_MOTOR) / 360.0) : ((arm == Snd) ? ((STEPS_SND_MOTOR * RATIO_SND_MOTOR) / 360.0) : 0))
-#define MOTOR_DELAY_MS 15
+short motor_delay_ms = 15;
 
+String trim_start(String data) {
+  int index = 0;
+  while(index < data.length()-1) if (data.charAt(index) == ' ') {index++;} else {break;}
+  return data.substring(index);
+}
+
+String trim_end(String data) {
+  int index = data.length()-1;
+  while(index > 0) if (data.charAt(index) == ' ') {index--;} else {break;}
+  return data.substring(0, index);
+}
 
 void setup() {
   pinMode(STEP_PIN(Fst), OUTPUT);
@@ -48,7 +59,7 @@ void setup() {
   pinMode(DIR_PIN(Fst), OUTPUT);
   pinMode(DIR_PIN(Snd), OUTPUT);
 
-  Serial.begin(9600); // initialize the serial port:
+  Serial.begin(9600); // initialize the serial port
   verify_program();
 }
 
@@ -106,26 +117,35 @@ void execute_command(String command) {
 }
 
 void handle_homing_command(String command) {
-  if (command.charAt(0) == 'z') {
-    Serial.write("Zeroed\n");
-    fst_curr_angle = 0;
-    snd_curr_angle = 0;
-    return;
-  }
-  if (command.charAt(0) == 'w') {
-    Serial.print("f:");
-    Serial.println(fst_curr_angle);
-    Serial.print("s:");
-    Serial.println(snd_curr_angle);
-    return;
-  }
-  char arm_link = command.charAt(0); 
-  int deg_move = command.substring(command.indexOf(' ')+1).toInt();
-  
-  switch(arm_link) {
-    case 'f': execute_movement(fst_curr_angle+deg_move, snd_curr_angle); break;
-    case 's': execute_movement(fst_curr_angle, snd_curr_angle+deg_move); break;
-    default: Serial.write("Error: No such arm\n");
+  switch(command.charAt(0)) {
+    case 'w': {
+      Serial.write("f:"); Serial.println(fst_curr_angle);
+      Serial.write("s:"); Serial.println(snd_curr_angle);
+      return;
+    }
+    case 'z': {
+      Serial.write("Zeroed\n");
+      fst_curr_angle = 0;
+      snd_curr_angle = 0;
+      return;
+    }
+    case 'm': {
+      int new_delay = command.substring(command.indexOf(' ')+1).toInt();
+      if (new_delay < 6 || new_delay > 100) Serial.println("Error: Unacceptable delay");
+      else {Serial.println("Updating motor delay"); motor_delay_ms = new_delay;}
+      return;
+    }
+    case 'f': {
+      int deg_move = command.substring(command.indexOf(' ')+1).toInt();
+      execute_movement(fst_curr_angle+deg_move, snd_curr_angle);
+      return;
+    }
+    case 's': {
+      int deg_move = command.substring(command.indexOf(' ')+1).toInt();
+      execute_movement(fst_curr_angle, snd_curr_angle+deg_move);
+      return;
+    }
+    default: Serial.println("Error: Unknown command");
   }
 }
 
@@ -134,29 +154,17 @@ void handle_program_command(String command) {
     case 'v': { verify_program(); break; }
     case 'f': {
       load_program_array(command.substring(command.indexOf(' ')+1), sequence_fst, &sequence_size_fst);
-      Serial.write("Loaded array!\n");
+      Serial.println("Loaded array!");
       program_index = -1;
       break;
     }
     case 's':  {
       load_program_array(command.substring(command.indexOf(' ')+1), sequence_snd, &sequence_size_snd);
-      Serial.write("Loaded array!\n");
+      Serial.println("Loaded array!");
       program_index = -1;
       break;
     }
   }
-}
-
-String trim_start(String data) {
-  int index = 0;
-  while(index < data.length()-1) if (data.charAt(index) == ' ') {index++;} else {break;}
-  return data.substring(index);
-}
-
-String trim_end(String data) {
-  int index = data.length()-1;
-  while(index > 0) if (data.charAt(index) == ' ') {index--;} else {break;}
-  return data.substring(0, index);
 }
 
 void load_program_array(String data, short* array, short* array_size) {
@@ -203,7 +211,7 @@ void execute_movement(short fst_move_to, short snd_move_to) {
       digitalWrite(STEP_PIN(Snd), HIGH);
       delayMicroseconds(10);
       digitalWrite(STEP_PIN(Snd), LOW);
-      delay(MOTOR_DELAY_MS);
+      delay(motor_delay_ms);
     } 
     return; 
   }
@@ -213,7 +221,7 @@ void execute_movement(short fst_move_to, short snd_move_to) {
       digitalWrite(STEP_PIN(Fst), HIGH);
       delayMicroseconds(10);
       digitalWrite(STEP_PIN(Fst), LOW);
-      delay(MOTOR_DELAY_MS);
+      delay(motor_delay_ms);
     } 
     return; 
   }
@@ -226,43 +234,41 @@ void execute_movement(short fst_move_to, short snd_move_to) {
       delayMicroseconds(10);
       digitalWrite(STEP_PIN(Fst), LOW);
       digitalWrite(STEP_PIN(Snd), LOW);
-      delay(MOTOR_DELAY_MS);
+      delay(motor_delay_ms);
     }
     return;
   }
 
   if (fst_move_steps > snd_move_steps) {
-    fst_step_delay = MOTOR_DELAY_MS;
-    snd_step_delay = (int)(MOTOR_DELAY_MS * (fst_move_steps/(double)snd_move_steps));
+    fst_step_delay = motor_delay_ms;
+    snd_step_delay = (int)(motor_delay_ms * (fst_move_steps/(double)snd_move_steps));
   }
   else {
-    snd_step_delay = MOTOR_DELAY_MS;
-    fst_step_delay = (int)(MOTOR_DELAY_MS * (snd_move_steps/(double)fst_move_steps));
+    snd_step_delay = motor_delay_ms;
+    fst_step_delay = (int)(motor_delay_ms * (snd_move_steps/(double)fst_move_steps));
   }
 
   digitalWrite(STEP_PIN(Fst), LOW);
   digitalWrite(STEP_PIN(Snd), LOW);
-  int millis_since_fst = 0;
-  int millis_since_snd = 0;
-  int prev_millis = millis();
+  unsigned long latest_fst = millis();
+  unsigned long latest_snd = latest_fst;
+  bool fst_moved = false;
+  bool snd_moved = false;
   while(fst_move_steps || snd_move_steps) {
-    if (fst_move_steps && millis_since_fst >= fst_step_delay) {
+    if (fst_move_steps && (millis() - latest_fst) >= fst_step_delay) {
       fst_move_steps--;
+      fst_moved = true;
+      latest_fst = millis();
       digitalWrite(STEP_PIN(Fst), HIGH);
-      millis_since_fst = 0;
     }
-    if (snd_move_steps && millis_since_snd >= snd_step_delay) {
+    if (snd_move_steps && (millis() - latest_snd) >= snd_step_delay) {
       snd_move_steps--;
+      snd_moved = true;
+      latest_snd = millis();
       digitalWrite(STEP_PIN(Snd), HIGH);
-      millis_since_snd = 0;
     }
     delayMicroseconds(10);
-    digitalWrite(STEP_PIN(Fst), LOW);
-    digitalWrite(STEP_PIN(Snd), LOW);
-    int temp = millis();
-    millis_since_fst += temp - prev_millis;
-    millis_since_snd += temp - prev_millis;
-    prev_millis = temp;
+    if (fst_moved) {digitalWrite(STEP_PIN(Fst), LOW); fst_moved = false;}
+    if (snd_moved) {digitalWrite(STEP_PIN(Snd), LOW); snd_moved = false;}
   }
-
 }
