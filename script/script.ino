@@ -41,6 +41,8 @@ bool paused = false;
 #define STEPS_PER_DEG(arm) ((arm == Fst) ? ((STEPS_FST_MOTOR * RATIO_FST_MOTOR) / 360.0) : ((arm == Snd) ? ((STEPS_SND_MOTOR * RATIO_SND_MOTOR) / 360.0) : 0))
 short motor_delay_ms = 15;
 
+#define RAD_TO_DEG_FACTOR 180/3.1415926535
+
 String trim_start(String data) {
   int index = 0;
   while(index < data.length()-1) if (data.charAt(index) == ' ') {index++;} else {break;}
@@ -50,7 +52,7 @@ String trim_start(String data) {
 String trim_end(String data) {
   int index = data.length()-1;
   while(index > 0) if (data.charAt(index) == ' ') {index--;} else {break;}
-  return data.substring(0, index);
+  return data.substring(0, index+1);
 }
 
 void setup() {
@@ -81,19 +83,20 @@ void loop() {
   }
 }
 
-void verify_program() {
+bool verify_program() {
   program_index = -1;
-  if (sequence_size_fst != sequence_size_snd) {Serial.write("Error: Different lengths\n"); return;}
+  if (sequence_size_fst != sequence_size_snd) {Serial.write("Error: Different lengths\n"); return false;}
   for(short i = 0; i < sequence_size_fst; i++) {
     if (
       sequence_fst[i] < -FREE_DEG_FST || 
       sequence_fst[i] > FREE_DEG_FST || 
       sequence_snd[i] < -FREE_DEG_SND || 
       sequence_snd[i] > FREE_DEG_SND
-    ) {Serial.write("Error: Broken limits\n"); return;}       
+    ) {Serial.write("Error: Broken limits\n"); return false;}       
   }
   Serial.write("Program verified!\n");
   program_index = 0;
+  return true;
 }
 
 void execute_command(String command) {
@@ -167,8 +170,65 @@ void handle_program_command(String command) {
       program_index = -1;
       break;
     }
+    case 'c': {
+      String rest = command.substring(2);
+
+      double x = rest.substring(0, rest.indexOf(',')).toDouble();
+      double z = rest.substring(rest.indexOf(',')+1).toDouble();
+
+      Serial.print("Calculating inverse kinematics for coordinate: (");
+      Serial.print(x);
+      Serial.print(", ");
+      Serial.print(z);
+      Serial.print(")");
+      Serial.println();
+
+      double s_angle = 0;
+      double f_angle = 0;
+      coords_to_angles(x, z, &s_angle, &f_angle);
+
+      sequence_size_fst = 1;
+      sequence_fst[0] = (int)round(f_angle);
+      sequence_size_snd = 1;
+      sequence_snd[0] = (int)round(s_angle);
+
+      Serial.println("Loaded array!");
+
+      program_index = -1;
+
+      print_program();
+      break;
+    }
     default: Serial.println("Error: Unknown command");
   }
+}
+
+void print_program() {
+  
+  Serial.println("Program:");
+
+  Serial.print("fst: [");
+  for (int i = 0; i < sequence_size_fst; i++) {
+    Serial.print(sequence_fst[i]);
+    Serial.print("\t");
+  }
+  Serial.println("]");
+
+  Serial.print("snd: [");
+  for (int i = 0; i < sequence_size_snd; i++) {
+    Serial.print(sequence_snd[i]);
+    Serial.print("\t");
+  }
+  Serial.println("]");
+}
+
+void coords_to_angles(double x, double z, double* s_angle, double* f_angle) {
+  double dist = sqrt(x*x + z*z);
+  double blah = atan(z/x) * RAD_TO_DEG_FACTOR;
+  double theta = 2 * asin((dist/2)/18) * RAD_TO_DEG_FACTOR;
+
+  *s_angle = 180 - theta;
+  *f_angle = 90 - (180 - theta)/2 - blah;
 }
 
 void handle_run_command(String command) {
@@ -205,7 +265,7 @@ void load_program_array(String data, short* array, short* array_size) {
     }
     i++;
   }
-  *array_size = i;  
+  *array_size = i;
 }
 
 void execute_movement(short fst_move_to, short snd_move_to) {
