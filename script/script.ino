@@ -19,15 +19,15 @@ char mode = Manual;
 char input_buffer[INPUT_BUFFER_SIZE + 1];
 char input_index = 0;
 
-#define FREE_DEG_FST 90
-#define FREE_DEG_SND 130
+#define FREE_DEG_FST 90.0f
+#define FREE_DEG_SND 130.0f
 #define TOTAL_ARM_LENGTH 36
-short fst_curr_angle = 0;
-short snd_curr_angle = 0;
+float fst_curr_angle = 0.0f;
+float snd_curr_angle = 0.0f;
 #define PROGRAM_BUFFER_SIZE 10
-short sequence_fst[PROGRAM_BUFFER_SIZE] = {0};
+float sequence_fst[PROGRAM_BUFFER_SIZE] = {0.0f};
 short sequence_size_fst = 1;
-short sequence_snd[PROGRAM_BUFFER_SIZE] = {0};
+float sequence_snd[PROGRAM_BUFFER_SIZE] = {0.0f};
 short sequence_size_snd = 1;
 short program_index = -1;
 bool paused = false;
@@ -116,14 +116,14 @@ void execute_command(String command) {
       Serial.write("Error: Unknown mode\n");
   }
   else switch(mode) {
-    case Manual: handle_Manual_command(command); break;
+    case Manual: handle_manual_command(command); break;
     case Program: handle_program_command(command); break;
     case Run: handle_run_command(command); break;
     default: break; 
   }
 }
 
-void handle_Manual_command(String command) {
+void handle_manual_command(String command) {
   switch(command.charAt(0)) {
     case 'w': {
       Serial.write("f:"); Serial.println(fst_curr_angle);
@@ -132,23 +132,23 @@ void handle_Manual_command(String command) {
     }
     case 'z': {
       Serial.write("Zeroed\n");
-      fst_curr_angle = 0;
-      snd_curr_angle = 0;
+      fst_curr_angle = 0.0f;
+      snd_curr_angle = 0.0f;
       return;
     }
     case 'm': {
       int new_delay = command.substring(command.indexOf(' ')+1).toInt();
-      if (new_delay < 6 || new_delay > 100) Serial.println("Error: Unacceptable delay");
+      if (new_delay < 1 || new_delay > 100) Serial.println("Error: Unacceptable delay");
       else {Serial.println("Updating motor delay"); motor_delay_ms = new_delay;}
       return;
     }
     case 'f': {
-      int deg_move = command.substring(command.indexOf(' ')+1).toInt();
+      float deg_move = command.substring(command.indexOf(' ')+1).toFloat();
       execute_movement(fst_curr_angle+deg_move, snd_curr_angle);
       return;
     }
     case 's': {
-      int deg_move = command.substring(command.indexOf(' ')+1).toInt();
+      float deg_move = command.substring(command.indexOf(' ')+1).toFloat();
       execute_movement(fst_curr_angle, snd_curr_angle+deg_move);
       return;
     }
@@ -217,7 +217,7 @@ void handle_program_command(String command) {
 
         i++;
       }
-      for(int t = 0; t < i; t++) {
+      for(short t = 0; t < i; t++) {
         sequence_fst[t] = temp_sequence_fst[t];
         sequence_snd[t] = temp_sequence_snd[t];
       }
@@ -238,14 +238,14 @@ void print_program() {
   Serial.println("Program:");
 
   Serial.print("fst: [");
-  for (int i = 0; i < sequence_size_fst; i++) {
+  for(short i = 0; i < sequence_size_fst; i++) {
     Serial.print(sequence_fst[i]);
     Serial.print("\t");
   }
   Serial.println("]");
 
   Serial.print("snd: [");
-  for (int i = 0; i < sequence_size_snd; i++) {
+  for(short i = 0; i < sequence_size_snd; i++) {
     Serial.print(sequence_snd[i]);
     Serial.print("\t");
   }
@@ -280,7 +280,7 @@ void handle_run_command(String command) {
   }
 }
 
-void load_program_array(String data, short* array, short* array_size) {
+void load_program_array(String data, float* array, short* array_size) {
 
   data = trim_start(trim_end(data));
 
@@ -289,11 +289,11 @@ void load_program_array(String data, short* array, short* array_size) {
     if (data == "") break;
 
     if (data.indexOf(' ') == -1) {
-      array[i] = (short)data.toInt();
+      array[i] = data.toFloat();
       data = "";
     }
     else {
-      array[i] = (short)data.substring(0, data.indexOf(' ')).toInt();
+      array[i] = data.substring(0, data.indexOf(' ')).toFloat();
       data = trim_start(data.substring(data.indexOf(' ')));
     }
     i++;
@@ -301,14 +301,14 @@ void load_program_array(String data, short* array, short* array_size) {
   *array_size = i;
 }
 
-void execute_movement(short fst_move_to, short snd_move_to) {
+void execute_movement(float fst_move_to, float snd_move_to) {
   int fst_step_delay;
   int snd_step_delay;
   int fst_move_steps;
   int snd_move_steps;
   {
-    int fst_move_deg = fst_move_to - fst_curr_angle;
-    int snd_move_deg = fst_move_deg + (snd_move_to - snd_curr_angle);
+    float fst_move_deg = fst_move_to - fst_curr_angle;
+    float snd_move_deg = fst_move_deg + (snd_move_to - snd_curr_angle);
     if (fst_move_deg > 0) { digitalWrite(DIR_PIN(Fst), MOVE_DIR(true, Fst)); } else { digitalWrite(DIR_PIN(Fst), MOVE_DIR(false, Fst)); fst_move_deg = abs(fst_move_deg); }
     if (snd_move_deg > 0) { digitalWrite(DIR_PIN(Snd), MOVE_DIR(true, Snd)); } else { digitalWrite(DIR_PIN(Snd), MOVE_DIR(false, Snd)); snd_move_deg = abs(snd_move_deg); }
     fst_move_steps = fst_move_deg * STEPS_PER_DEG(Fst);
