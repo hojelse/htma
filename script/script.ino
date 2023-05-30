@@ -158,6 +158,7 @@ void handle_Manual_command(String command) {
 void handle_program_command(String command) {
   switch(command.charAt(0)) {
     case 'v': { verify_program(); break; }
+    case 'p': { print_program(); break;}
     case 'f': {
       load_program_array(command.substring(command.indexOf(' ')+1), sequence_fst, &sequence_size_fst);
       Serial.println("Loaded array!");
@@ -171,6 +172,8 @@ void handle_program_command(String command) {
       break;
     }
     case 'c': {
+      int temp_sequence_fst[PROGRAM_BUFFER_SIZE];
+      int temp_sequence_snd[PROGRAM_BUFFER_SIZE];
       command = trim_start(trim_end(command.substring(2)));
       int i = 0;
       while(i < PROGRAM_BUFFER_SIZE) {
@@ -188,6 +191,10 @@ void handle_program_command(String command) {
           x = coordinate.substring(0, coordinate.indexOf(',')).toDouble();
           z = coordinate.substring(coordinate.indexOf(',')+1).toDouble();
         }
+        if (z < 0) {
+          Serial.println("Error: Negative z-axis is not allowed!");
+          return;
+        }
 
         Serial.print("Calculating inverse kinematics for coordinate: (");
         Serial.print(x);
@@ -200,10 +207,14 @@ void handle_program_command(String command) {
         double f_angle = 0;
         coords_to_angles(x, z, &s_angle, &f_angle);
 
-        sequence_fst[i] = (int)round(f_angle);
-        sequence_snd[i] = (int)round(s_angle);
+        temp_sequence_fst[i] = (int)round(f_angle);
+        temp_sequence_snd[i] = (int)round(s_angle);
 
         i++;
+      }
+      for(int t = 0; t < i; t++) {
+        sequence_fst[t] = temp_sequence_fst[t];
+        sequence_snd[t] = temp_sequence_snd[t];
       }
       Serial.println("Loaded arrays!");
       program_index = -1;
