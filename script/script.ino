@@ -3,7 +3,7 @@
  */
 
 enum Mode {
-  Homing = 'h',
+  Manual = 'm',
   Program = 'p',
   Run = 'r'
 };
@@ -13,7 +13,7 @@ enum Arm {
   Snd
 };
 
-char mode = Homing;
+char mode = Manual;
 
 #define INPUT_BUFFER_SIZE 20
 char input_buffer[INPUT_BUFFER_SIZE + 1];
@@ -106,7 +106,7 @@ void execute_command(String command) {
       paused = false;
       program_index = 0;
       Serial.write("Running\n");
-    case Homing:
+    case Manual:
     case Program:
       Serial.write("Mode switched\n");
       mode = command.charAt(1);
@@ -115,14 +115,14 @@ void execute_command(String command) {
       Serial.write("Error: Unknown mode\n");
   }
   else switch(mode) {
-    case Homing: handle_homing_command(command); break;
+    case Manual: handle_Manual_command(command); break;
     case Program: handle_program_command(command); break;
     case Run: handle_run_command(command); break;
     default: break; 
   }
 }
 
-void handle_homing_command(String command) {
+void handle_Manual_command(String command) {
   switch(command.charAt(0)) {
     case 'w': {
       Serial.write("f:"); Serial.println(fst_curr_angle);
@@ -171,30 +171,44 @@ void handle_program_command(String command) {
       break;
     }
     case 'c': {
-      String rest = command.substring(2);
+      command = trim_start(trim_end(command.substring(2)));
+      int i = 0;
+      while(i < PROGRAM_BUFFER_SIZE) {
+        double x = 0;
+        double z = 0;
+        if (command.length() <= 0) break;
+        if (command.indexOf(' ') == -1) {
+          x = command.substring(0, command.indexOf(',')).toDouble();
+          z = command.substring(command.indexOf(',')+1).toDouble();
+          command = "";
+        }
+        else {
+          String coordinate = command.substring(0,command.indexOf(' ')+1);
+          command = trim_start(command.substring(command.indexOf(' ')+1));
+          x = coordinate.substring(0, coordinate.indexOf(',')).toDouble();
+          z = coordinate.substring(coordinate.indexOf(',')+1).toDouble();
+        }
 
-      double x = rest.substring(0, rest.indexOf(',')).toDouble();
-      double z = rest.substring(rest.indexOf(',')+1).toDouble();
+        Serial.print("Calculating inverse kinematics for coordinate: (");
+        Serial.print(x);
+        Serial.print(", ");
+        Serial.print(z);
+        Serial.print(")");
+        Serial.println();
 
-      Serial.print("Calculating inverse kinematics for coordinate: (");
-      Serial.print(x);
-      Serial.print(", ");
-      Serial.print(z);
-      Serial.print(")");
-      Serial.println();
+        double s_angle = 0;
+        double f_angle = 0;
+        coords_to_angles(x, z, &s_angle, &f_angle);
 
-      double s_angle = 0;
-      double f_angle = 0;
-      coords_to_angles(x, z, &s_angle, &f_angle);
+        sequence_fst[i] = (int)round(f_angle);
+        sequence_snd[i] = (int)round(s_angle);
 
-      sequence_size_fst = 1;
-      sequence_fst[0] = (int)round(f_angle);
-      sequence_size_snd = 1;
-      sequence_snd[0] = (int)round(s_angle);
-
-      Serial.println("Loaded array!");
-
+        i++;
+      }
+      Serial.println("Loaded arrays!");
       program_index = -1;
+      sequence_size_fst = i;
+      sequence_size_snd = i;
 
       print_program();
       break;
