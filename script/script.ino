@@ -21,6 +21,7 @@ char input_index = 0;
 
 #define FREE_DEG_FST 90
 #define FREE_DEG_SND 130
+#define TOTAL_ARM_LENGTH 36
 short fst_curr_angle = 0;
 short snd_curr_angle = 0;
 #define PROGRAM_BUFFER_SIZE 10
@@ -205,7 +206,11 @@ void handle_program_command(String command) {
 
         double s_angle = 0;
         double f_angle = 0;
-        coords_to_angles(x, z, &s_angle, &f_angle);
+        bool reachable = coords_to_angles(x, z, &s_angle, &f_angle);
+        if(!reachable) {
+          Serial.println("Error: Unreachable coordinate!");
+          return;
+        }
 
         temp_sequence_fst[i] = (int)round(f_angle);
         temp_sequence_snd[i] = (int)round(s_angle);
@@ -247,13 +252,16 @@ void print_program() {
   Serial.println("]");
 }
 
-void coords_to_angles(double x, double z, double* s_angle, double* f_angle) {
+bool coords_to_angles(double x, double z, double* s_angle, double* f_angle) {
   double dist = sqrt(x*x + z*z);
   double blah = atan(z/x) * RAD_TO_DEG_FACTOR;
   double theta = 2 * asin((dist/2)/18) * RAD_TO_DEG_FACTOR;
 
+  if (dist > TOTAL_ARM_LENGTH) return false;
+
   *s_angle = 180 - theta;
   *f_angle = 90 - (180 - theta)/2 - blah;
+  return true;
 }
 
 void handle_run_command(String command) {
